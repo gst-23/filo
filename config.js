@@ -5,6 +5,6 @@
  * ATTENZIONE: senza autenticazione i dati cloud sono pubblicamente leggibili e modificabili.
  */
 window.FILO_CONFIG = {
-  supabaseUrl: '',
-  supabasePublishableKey: ''
+  supabaseUrl: 'https://ssgmhdkkakzydljxenhl.supabase.co',
+  supabasePublishableKey: 'sb_publishable_-ND0bD_EGjZFJXO6mfoCHg_kAljmGeH'
 };
