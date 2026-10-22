@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0d1118">
-  <meta name="description" content="Filo: attivita, scadenze, sotto-attivita, note e allegati, senza distrazioni.">
+  <meta name="description" content="Filo: attività, scadenze, sotto-attività e allegati, senza distrazioni.">
   <title>Filo — Le tue attività</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
@@ -22,13 +22,6 @@
 
     <main>
       <div id="tasks" class="task-list" aria-label="Attività ordinate per data di scadenza" aria-live="polite"></div>
-      <div id="completedSection" class="completed-wrap" hidden>
-        <button type="button" id="completedToggle" class="completed-toggle" aria-expanded="false">
-          <span>Attività completate <span id="completedCount" class="completed-count">0</span></span>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-        </button>
-        <div id="completedList" class="task-list completed-list" hidden></div>
-      </div>
     </main>
 
     <footer class="app-footer">
@@ -42,35 +35,6 @@
     </footer>
   </div>
 
-  <div class="shade hidden" id="shade"></div>
-  <section id="taskModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-    <div class="modal-head">
-      <h2 id="modalTitle">Nuova attività</h2>
-      <button type="button" class="close-modal" id="closeModal" aria-label="Chiudi">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
-    </div>
-    <form id="taskForm" class="task-form">
-      <label>Nome dell'attività <span class="required">*</span>
-        <input name="title" required maxlength="180" autocomplete="off" placeholder="Es. Inviare il preventivo">
-      </label>
-      <div class="field-row">
-        <label>Scadenza
-          <input name="due_date" type="date">
-        </label>
-        <label>Progetto / categoria
-          <input name="project" maxlength="80" placeholder="Es. Lavoro">
-        </label>
-      </div>
-      <label>Descrizione
-        <textarea name="description" rows="4" maxlength="20000" placeholder="Dettagli e informazioni utili..."></textarea>
-      </label>
-      <div class="form-footer">
-        <button class="cancel-button" type="button" id="cancelModal">Annulla</button>
-        <button class="save-button" type="submit">Salva attività</button>
-      </div>
-    </form>
-  </section>
   <div id="toast" class="toast hidden" role="status"></div>
 </body>
 </html>

@@ -78,8 +78,8 @@ let cloud = false;
 let working = false;
 let openMenuId = null;
 let expandedIds = new Set();
-let completedOpen = false;
-let editId = null;
+let inlineEditor = null; // Un'unica riga modificabile alla volta; i nuovi draft non sono ancora sul cloud.
+const deletingIds = new Set();
 let toastTimer = null;
 let undoCallback = null;
 let writeQueue = Promise.resolve();
@@ -159,9 +159,10 @@ async function saveTask(value) {
     return false;
   }
 }
-async function deleteTask(taskId) {
-  const item=tasks.find(t=>t.id===taskId);if(!item)return;
-  if(!confirm(`Eliminare definitivamente "${item.title}" e i suoi allegati?`))return;
+async function deleteTask(taskId, fromCompletion=false) {
+  const item=tasks.find(t=>t.id===taskId);if(!item||deletingIds.has(taskId))return;
+  if(!fromCompletion && !confirm(`Eliminare definitivamente "${item.title}" e i suoi allegati?`))return;
+  deletingIds.add(taskId);
   try {
     await queueOperation(async()=>{
       if(cloud){const {error}=await supa.from('filo_tasks').delete().eq('id',item.id);if(error)throw error;}
@@ -170,17 +171,14 @@ async function deleteTask(taskId) {
     tasks=tasks.filter(t=>t.id!==item.id);
     expandedIds.delete(taskId);openMenuId=null;render();
     for(const a of item.attachments){try{await removeBlob(a);}catch(e){console.warn('Pulizia allegato:',e);}}
-    showToast('Attività eliminata.');
+    showToast(fromCompletion?'Attività completata e rimossa definitivamente.':'Attività eliminata.');
   }catch(e){storageLabel('Errore durante l’eliminazione');showToast('Eliminazione non riuscita: '+e.message);}
+  finally {deletingIds.delete(taskId);}
 }
 async function changeDone(taskId) {
-  const t=tasks.find(t=>t.id===taskId);if(!t)return;
-  const done=t.status==='done';
-  if(await saveTask({...t,status:done?'todo':'done'})) {
-    if(!done) {expandedIds.delete(taskId);openMenuId=null;showToast('Attività completata.');}
-    else {showToast('Attività riaperta.');}
-    render();
-  }
+  // Su richiesta, il segno di spunta completa E cancella il record (inclusi gli allegati).
+  // Nessuna sezione "completate"; non è reversibile dopo la cancellazione.
+  await deleteTask(taskId,true);
 }
 async function postpone(taskId,days) {
   const t=tasks.find(t=>t.id===taskId);
@@ -198,39 +196,50 @@ async function postpone(taskId,days) {
 
 function render() {
   const open=tasks.filter(t=>t.status!=='done').sort(byDueDate);
-  const complete=tasks.filter(t=>t.status==='done').sort(byDueDate);
-  $('tasks').innerHTML=open.length?open.map(taskCard).join(''):
-    `<div class="empty-state"><h2>${tasks.length?'Tutte le attività completate':'Una cosa alla volta.'}</h2><p>${tasks.length?'Puoi riaprire un’attività dall’elenco in basso.':'Inizia aggiungendo la tua prima attività. Scadenze, note e sotto-attività resteranno qui, in ordine cronologico.'}</p><button type="button" data-action="new">+ Nuova attività</button></div>`;
-  $('completedSection').hidden=!complete.length;
-  $('completedCount').textContent=complete.length;
-  $('completedToggle').setAttribute('aria-expanded',String(completedOpen));
-  $('completedList').hidden=!completedOpen;
-  $('completedList').innerHTML=completedOpen?complete.map(taskCard).join(''):'';
+  const draft=inlineEditor?.isNew?inlineTaskRow(inlineEditor):'';
+  const empty=`<div class="empty-state"><h2>Una cosa alla volta.</h2><p>Nessuna attività. Premi il pulsante + in alto per iniziare.</p></div>`;
+  $('tasks').innerHTML=draft+(open.length?open.map(taskCard).join(''):draft?'':empty);
 }
 function taskCard(t) {
+  if(inlineEditor?.id===t.id)return inlineTaskRow(inlineEditor);
   const state=dueState(t),active=expandedIds.has(t.id),menu=openMenuId===t.id;
   const due=t.due_date?shortDate(t.due_date):'Senza data';
   const full=t.due_date?absoluteDate(t.due_date):'Nessuna scadenza impostata';
-  const subcount=t.subtasks.length;
-  const attcount=t.attachments.length;
-  const counts=`<span class="count-unit" title="${attcount} allegati">${ico('clip')}<strong>${attcount}</strong></span><span class="count-unit" title="${subcount} sotto-attività">${ico('checklist')}<strong>${subcount}</strong></span>`;
-  const delay=t.status==='done'?'':`<div class="delay-control" data-task-id="${t.id}">
+  const subcount=t.subtasks.length,attcount=t.attachments.length;
+  const attachmentCount=attcount?`<span class="count-unit" title="${attcount} allegati">${ico('clip')}<strong>${attcount}</strong></span>`:'';
+  const delay=`<div class="delay-control" data-task-id="${t.id}">
     <button type="button" class="delay-trigger" title="Rinvia la scadenza (fino a 7 giorni)" aria-label="Rinvia ${esc(t.title)}" data-action="slider-toggle" data-id="${t.id}">+0g</button>
-    <div class="delay-panel"><span class="delay-note" data-preview="${t.id}">Trascina da 1 a 7 giorni</span>
+    <div class="delay-panel"><span class="delay-note" data-preview="${t.id}"></span>
       <input class="delay-range" type="range" min="0" max="7" step="1" value="0" style="--pct:0%" data-id="${t.id}" aria-label="Giorni da aggiungere, da zero a sette">
       <span class="delay-count" data-count="${t.id}">+0g</span>
     </div></div>`;
   return `<article class="task-card ${state}" id="task-${t.id}" data-task-id="${t.id}">
     <div class="task-row">
-      <button type="button" class="check-button ${t.status==='done'?'checked':''}" data-action="done" data-id="${t.id}" aria-label="${t.status==='done'?'Riapri':'Completa'}: ${esc(t.title)}" title="${t.status==='done'?'Riapri':'Segna come completata'}">${ico('check')}</button>
-      <div class="task-heading"><button type="button" class="title-button" data-action="toggle" data-id="${t.id}">${esc(t.title)}</button><div class="project-line">${esc(t.project||'Attività')}</div></div>
-      <div class="due-date ${state}" title="${esc(full)}">${esc(due)}<span class="date-secondary">${state==='overdue'?'Scaduta':state==='today'?'Scade oggi':state==='completed'?'Completata':t.due_date?'Scadenza':'Da pianificare'}</span></div>
-      ${delay||'<span></span>'}
-      <div class="task-count">${counts}</div>
+      <button type="button" class="check-button" data-action="done" data-id="${t.id}" aria-label="Completa ed elimina: ${esc(t.title)}" title="Completa e rimuovi definitivamente">${ico('check')}</button>
+      <div class="task-heading"><button type="button" class="title-button" data-action="toggle" data-id="${t.id}">${esc(t.title)}</button></div>
+      <div class="due-date ${state}" title="${esc(full)}">${esc(due)}</div>
+      ${delay}
+      <div class="task-count">${attachmentCount}</div>
       <div class="menu-control"><button class="round-action" type="button" data-action="menu" data-id="${t.id}" aria-label="Altre opzioni per ${esc(t.title)}" aria-haspopup="menu" aria-expanded="${menu}">${ico('dots')}</button>${menu?moreMenu(t):''}</div>
-      <button type="button" class="expand-action" data-action="toggle" data-id="${t.id}" aria-label="${active?'Chiudi':'Apri'} sotto-attività e note di ${esc(t.title)}" aria-expanded="${active}">${subcount?`<span class="subtask-number">${subcount}</span>`:''}${ico('chevron')}</button>
+      <button type="button" class="expand-action" data-action="toggle" data-id="${t.id}" aria-label="${active?'Chiudi':'Apri'} sotto-attività e allegati di ${esc(t.title)}" aria-expanded="${active}">${subcount?`<span class="subtask-number">${subcount}</span>`:''}${ico('chevron')}</button>
     </div>
     ${active?expandedContent(t):''}
+  </article>`;
+}
+function inlineTaskRow(editor) {
+  const id=esc(editor.id);
+  return `<article class="task-card inline-task-card" id="task-${id}">
+    <form class="inline-task-form" data-form="inline" data-id="${id}">
+      <span class="inline-circle" aria-hidden="true"></span>
+      <label class="visually-hidden" for="inline-title-${id}">Titolo dell'attività</label>
+      <input id="inline-title-${id}" class="inline-title" type="text" name="title" required maxlength="180" autocomplete="off" placeholder="Scrivi il titolo..." value="${esc(editor.title)}">
+      <label class="visually-hidden" for="inline-date-${id}">Data di scadenza</label>
+      <input id="inline-date-${id}" class="inline-date" type="date" name="due_date" required value="${esc(editor.due_date)}" aria-label="Data di scadenza">
+      <div class="inline-actions">
+        <button type="submit" class="inline-save" title="Salva attività" aria-label="Salva attività">${ico('check')}</button>
+        <button type="button" class="inline-cancel" data-action="cancel-inline" data-id="${id}" title="Annulla" aria-label="Annulla modifica">×</button>
+      </div>
+    </form>
   </article>`;
 }
 function moreMenu(t) {
@@ -248,7 +257,6 @@ function expandedContent(t) {
     <span class="subtask-label">${esc(s.title)}</span>
     <button type="button" class="light-delete" data-action="del-sub" data-id="${t.id}" data-sub-id="${esc(s.id)}" title="Elimina sotto-attività" aria-label="Elimina sotto-attività">${ico('trash')}</button>
   </div>`).join('');
-  const notes=t.notes.slice().reverse().map(n=>`<div class="note-item"><span class="note-date">${esc(new Date(n.created_at||now()).toLocaleDateString('it-IT',{day:'numeric',month:'short'}))}</span><p>${esc(n.text)}</p><button type="button" class="light-delete" data-action="del-note" data-id="${t.id}" data-note-id="${esc(n.id)}" title="Elimina nota" aria-label="Elimina nota">${ico('trash')}</button></div>`).join('');
   const files=t.attachments.map(a=>`<div class="file-pill" title="${esc(a.name)}">
     <button type="button" data-action="download" data-id="${t.id}" data-file-id="${esc(a.id)}" title="Scarica allegato">${ico('clip')}</button>
     <span class="file-name">${esc(a.name)}</span><span class="file-size">${formatBytes(a.size||0)}</span>
@@ -260,11 +268,8 @@ function expandedContent(t) {
       <div class="subtask-list">${subtasks||'<p class="detail-text">Nessuna sotto-attività.</p>'}</div>
       <form class="add-inline" data-form="sub" data-id="${t.id}"><input name="title" maxlength="180" placeholder="Aggiungi sotto-attività" required aria-label="Titolo della nuova sotto-attività"><button type="submit">+ Aggiungi</button></form>
       </section>
-      ${t.description?`<section class="detail-section"><div class="detail-head">Descrizione</div><p class="detail-text">${esc(t.description)}</p></section>`:''}
     </div>
     <div class="detail-column">
-      <section class="detail-section"><div class="detail-head">Note <small>${t.notes.length}</small></div><div class="notes-list">${notes||'<p class="detail-text">Nessuna nota.</p>'}</div>
-      <form class="add-inline note-entry" data-form="note" data-id="${t.id}"><textarea name="text" maxlength="12000" rows="2" placeholder="Scrivi una nota..." required aria-label="Scrivi una nota"></textarea><button type="submit">+ Aggiungi</button></form></section>
       <section class="detail-section"><div class="detail-head">Allegati <small>${t.attachments.length}</small></div>
         <div class="attachment-list">${files||'<p class="detail-text">Nessun allegato.</p>'}</div>
         <label class="attach-select">+ Aggiungi file<input type="file" multiple data-upload="${t.id}" id="upload-${t.id}" aria-label="Carica allegati"></label>
@@ -274,38 +279,48 @@ function expandedContent(t) {
 }
 function formatBytes(bytes) {return bytes<1024?`${bytes} B`:bytes<1024**2?`${(bytes/1024).toFixed(0)} KB`:`${(bytes/(1024**2)).toFixed(1)} MB`;}
 
-function openModal(taskId=null) {
-  editId=taskId;
-  $('taskForm').reset();
+function openInline(taskId=null) {
+  if(inlineEditor) {
+    // Impedisce di perdere input ancora non salvati quando si preme di nuovo "+".
+    document.getElementById(`inline-title-${inlineEditor.id}`)?.focus();
+    showToast('Prima salva o annulla la riga che stai modificando.');
+    return;
+  }
   const t=tasks.find(v=>v.id===taskId);
-  $('modalTitle').textContent=t?'Modifica attività':'Nuova attività';
-  const f=$('taskForm').elements;
-  f.title.value=t?.title||'';
-  f.due_date.value=t?.due_date||todayISO();
-  f.project.value=t?.project||'';
-  f.description.value=t?.description||'';
-  if(t && !t.due_date)f.due_date.value='';
-  $('shade').classList.remove('hidden');$('taskModal').classList.remove('hidden');
-  setTimeout(()=>f.title.focus(),15);
+  if(taskId&&!t)return;
+  inlineEditor={id:t?.id||uuid(),isNew:!t,title:t?.title||'',due_date:t?.due_date||''};
+  openMenuId=null;
+  render();
+  requestAnimationFrame(()=>{
+    const field=document.getElementById(`inline-title-${inlineEditor?.id}`);
+    field?.focus();
+    if(t)field?.select();
+  });
 }
-function closeModal() {$('shade').classList.add('hidden');$('taskModal').classList.add('hidden');editId=null;}
-async function submitTaskForm(e) {
+function cancelInline() {inlineEditor=null;render();}
+async function submitInlineForm(e) {
   e.preventDefault();
-  const f=new FormData(e.currentTarget);
-  const title=String(f.get('title')||'').trim();if(!title)return;
-  const old=tasks.find(t=>t.id===editId);
-  const item=cleanTask({...old,id:old?.id||uuid(),title,
-    project:String(f.get('project')||'').trim(),
-    description:String(f.get('description')||''),due_date:String(f.get('due_date')||'')||null});
-  const ok=await saveTask(item);
-  if(ok){closeModal();showToast(old?'Attività modificata.':'Attività creata.');}
+  const form=e.currentTarget,editor=inlineEditor;
+  if(!editor||editor.id!==form.dataset.id)return;
+  const fields=new FormData(form);
+  const title=String(fields.get('title')||'').trim();
+  const due_date=String(fields.get('due_date')||'');
+  if(!title){form.elements.title.focus();return;}
+  if(!fromISO(due_date)){form.elements.due_date.focus();showToast('Seleziona una data di scadenza.');return;}
+  const old=tasks.find(t=>t.id===editor.id);
+  if(!editor.isNew&&!old){showToast('Questa attività non è più disponibile.');cancelInline();return;}
+  const item=cleanTask({...old,id:editor.id,title,due_date});
+  inlineEditor=null;
+  const ok=await saveTask(item); // upsert nel cloud come avveniva nel vecchio modulo.
+  if(ok)showToast(old?'Attività modificata.':'Attività creata.');
+  else {inlineEditor={...editor,title,due_date};render();}
 }
 
 async function duplicateTask(taskId) {
   const t=tasks.find(t=>t.id===taskId);if(!t)return;
   const copy=cleanTask({...t,id:uuid(),title:`${t.title} (copia)`,status:'todo',
     subtasks:t.subtasks.map(s=>({...s,id:uuid()})),
-    notes:t.notes.map(n=>({...n,id:uuid()})),
+    notes:[], // Non riprodurre note storiche non più visibili nell'interfaccia.
     attachments:[],created_at:now()});
   if(await saveTask(copy)){expandedIds.add(copy.id);openMenuId=null;render();showToast('Attività duplicata senza allegati.');}
 }
@@ -318,7 +333,7 @@ function handleHash() {
   const match=location.hash.match(/^#task=([a-f0-9-]{36})$/i);
   if(match && tasks.some(t=>t.id===match[1])){
     const t=tasks.find(t=>t.id===match[1]);
-    if(t?.status==='done')completedOpen=true;
+    if(t?.status==='done')return; // Le completate storiche restano solo nei backup/database.
     expandedIds.add(match[1]);render();
     setTimeout(()=>document.getElementById(`task-${match[1]}`)?.scrollIntoView({block:'center',behavior:'smooth'}),80);
   }
@@ -473,7 +488,8 @@ async function importBackup(file) {
 
 async function handleAction(action,taskId,button) {
   const t=tasks.find(t=>t.id===taskId);
-  if(action==='new')return openModal();
+  if(action==='new')return openInline();
+  if(action==='cancel-inline')return cancelInline();
   if(!t)return;
   if(action==='done')return changeDone(taskId);
   if(action==='toggle'){
@@ -487,7 +503,7 @@ async function handleAction(action,taskId,button) {
     el?.querySelector('.delay-range')?.focus();return;
   }
   if(action==='menu') {openMenuId=openMenuId===taskId?null:taskId;render();return;}
-  if(action==='edit'){openMenuId=null;render();return openModal(taskId);}
+  if(action==='edit'){openMenuId=null;return openInline(taskId);}
   if(action==='duplicate')return duplicateTask(taskId);
   if(action==='copy'){openMenuId=null;render();return copyTaskLink(taskId);}
   if(action==='attach'){
@@ -500,77 +516,77 @@ async function handleAction(action,taskId,button) {
   if(action==='del-sub'){
     return saveTask({...t,subtasks:t.subtasks.filter(s=>s.id!==button.dataset.subId)});
   }
-  if(action==='del-note'){
-    if(confirm('Eliminare questa nota?'))return saveTask({...t,notes:t.notes.filter(n=>n.id!==button.dataset.noteId)});
-  }
 }
 function updatingForm() {
   const el=document.activeElement;
-  return !!(el?.matches('input:not([type=range]),textarea') || !$('taskModal').classList.contains('hidden'));
+  return !!(inlineEditor || el?.matches('input:not([type=range]),textarea'));
 }
 function wireEvents() {
-  $('newTask').addEventListener('click',()=>openModal());
-  $('closeModal').addEventListener('click',closeModal);
-  $('cancelModal').addEventListener('click',closeModal);
-  $('shade').addEventListener('click',closeModal);
-  $('taskForm').addEventListener('submit',submitTaskForm);
+  $('newTask').addEventListener('click',()=>openInline());
   $('exportBackup').addEventListener('click',exportBackup);
   $('importBackup').addEventListener('click',()=>$('importFile').click());
   $('importFile').addEventListener('change',e=>{if(e.target.files?.length)importBackup(e.target.files[0]);});
   $('refreshTasks').addEventListener('click',()=>refresh(true));
-  $('completedToggle').addEventListener('click',()=>{completedOpen=!completedOpen;render();});
   $('toast').addEventListener('click',async e=>{
     if(e.target.id==='undoToast'&&undoCallback){const fn=undoCallback;toastDismiss();await fn();}
   });
   document.addEventListener('keydown',e=>{
-    if(e.key==='Escape'){closeModal();openMenuId=null;document.querySelectorAll('.delay-control.is-open').forEach(n=>n.classList.remove('is-open'));render();}
-    if((e.key==='n'||e.key==='N')&&!e.altKey&&!e.metaKey&&!e.ctrlKey&&!updatingForm()&&!document.activeElement?.closest('button')){e.preventDefault();openModal();}
+    if(e.key==='Escape') {
+      if(inlineEditor)cancelInline();
+      else {openMenuId=null;document.querySelectorAll('.delay-control.is-open').forEach(n=>n.classList.remove('is-open'));render();}
+    }
+    if((e.key==='n'||e.key==='N')&&!e.altKey&&!e.metaKey&&!e.ctrlKey&&!updatingForm()&&!document.activeElement?.closest('button')){
+      e.preventDefault();openInline();
+    }
   });
-  for(const root of [$('tasks'),$('completedList')]) {
-    root.addEventListener('click',async e=>{
-      const btn=e.target.closest('button[data-action]');if(!btn)return;
-      e.preventDefault();e.stopPropagation();
-      await handleAction(btn.dataset.action,btn.dataset.id,btn);
-    });
-    root.addEventListener('submit',async e=>{
-      const form=e.target.closest('form[data-form]');if(!form)return;
-      e.preventDefault();
-      const taskId=form.dataset.id,t=tasks.find(t=>t.id===taskId),f=new FormData(form);
-      if(!t)return;
-      if(form.dataset.form==='sub'){
-        const title=String(f.get('title')||'').trim();if(!title)return;
-        await saveTask({...t,subtasks:[...t.subtasks,{id:uuid(),title,done:false}]});
-      }else if(form.dataset.form==='note'){
-        const text=String(f.get('text')||'').trim();if(!text)return;
-        await saveTask({...t,notes:[...t.notes,{id:uuid(),text,created_at:now()}]});
-      }
-    });
-    root.addEventListener('change',async e=>{
-      const target=e.target;
-      if(target.matches('input[data-action="subtoggle"]')){
-        const t=tasks.find(t=>t.id===target.dataset.id);if(!t)return;
-        await saveTask({...t,subtasks:t.subtasks.map(s=>s.id===target.dataset.subId?{...s,done:target.checked}:s)});
-      }
-      if(target.matches('input[data-upload]')){
-        const files=Array.from(target.files||[]);if(files.length)await uploadFiles(target.dataset.upload,files);
-      }
-      if(target.matches('.delay-range')){
-        const days=Number(target.value);
-        if(days>0)await postpone(target.dataset.id,days);
-      }
-    });
-    root.addEventListener('input',e=>{
-      const target=e.target;if(!target.matches('.delay-range'))return;
-      const days=Number(target.value),root=target.closest('.delay-control');
-      const t=tasks.find(t=>t.id===target.dataset.id);
-      const start=(!t?.due_date||t.due_date<todayISO())?todayISO():t.due_date;
-      const next=days?plusDays(start,days):start;
-      target.style.setProperty('--pct',`${(days/7)*100}%`);
-      root.querySelector('.delay-count').textContent=`+${days}g`;
-      root.querySelector('.delay-trigger').textContent=`+${days}g`;
-      root.querySelector('.delay-note').textContent=days?`Nuova data: ${shortDate(next)}`:'Trascina da 1 a 7 giorni';
-    });
-  }
+  const root=$('tasks');
+  root.addEventListener('click',async e=>{
+    const btn=e.target.closest('button[data-action]');if(!btn)return;
+    e.preventDefault();e.stopPropagation();
+    await handleAction(btn.dataset.action,btn.dataset.id,btn);
+  });
+  root.addEventListener('submit',async e=>{
+    const form=e.target.closest('form[data-form]');if(!form)return;
+    e.preventDefault();
+    if(form.dataset.form==='inline')return submitInlineForm({currentTarget:form,preventDefault(){}});
+    const taskId=form.dataset.id,t=tasks.find(t=>t.id===taskId),f=new FormData(form);
+    if(!t)return;
+    if(form.dataset.form==='sub'){
+      const title=String(f.get('title')||'').trim();if(!title)return;
+      await saveTask({...t,subtasks:[...t.subtasks,{id:uuid(),title,done:false}]});
+    }
+  });
+  root.addEventListener('change',async e=>{
+    const target=e.target;
+    if(target.matches('input[data-action="subtoggle"]')){
+      const t=tasks.find(t=>t.id===target.dataset.id);if(!t)return;
+      await saveTask({...t,subtasks:t.subtasks.map(s=>s.id===target.dataset.subId?{...s,done:target.checked}:s)});
+    }
+    if(target.matches('input[data-upload]')){
+      const files=Array.from(target.files||[]);if(files.length)await uploadFiles(target.dataset.upload,files);
+    }
+    if(target.matches('.delay-range')){
+      const days=Number(target.value);
+      if(days>0)await postpone(target.dataset.id,days);
+    }
+  });
+  root.addEventListener('input',e=>{
+    const target=e.target;
+    if(inlineEditor && target.closest('.inline-task-form')?.dataset.id===inlineEditor.id){
+      if(target.name==='title')inlineEditor.title=target.value;
+      if(target.name==='due_date')inlineEditor.due_date=target.value;
+      return;
+    }
+    if(!target.matches('.delay-range'))return;
+    const days=Number(target.value),slider=target.closest('.delay-control');
+    const t=tasks.find(t=>t.id===target.dataset.id);
+    const start=(!t?.due_date||t.due_date<todayISO())?todayISO():t.due_date;
+    const next=days?plusDays(start,days):start;
+    target.style.setProperty('--pct',`${(days/7)*100}%`);
+    slider.querySelector('.delay-count').textContent=`+${days}g`;
+    slider.querySelector('.delay-trigger').textContent=`+${days}g`;
+    slider.querySelector('.delay-note').textContent=days?`Nuova data: ${shortDate(next)}`:'';
+  });
   document.addEventListener('click',e=>{
     if(openMenuId && !e.target.closest('.menu-control')){openMenuId=null;render();}
     if(!e.target.closest('.delay-control'))document.querySelectorAll('.delay-control.is-open').forEach(n=>n.classList.remove('is-open'));

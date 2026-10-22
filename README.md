@@ -1,88 +1,43 @@
-# Filo. — Attività senza distrazioni
+# Filo. — aggiornamento interfaccia (ottobre 2026)
 
-Un sito web statico in italiano (HTML/CSS/JS) pronto per **GitHub Pages**. Nessuna compilazione, nessun account per entrare nella lista: un solo link condivisibile. **Per sincronizzare attività e allegati tra dispositivi devi configurare Supabase**; pubblicare su GitHub, da solo, non salva i dati online.
+Questo pacchetto aggiorna **il progetto Filo già online** su GitHub Pages con Supabase configurato. La grafica resta scura, con logo minimal e giallo fluo. Non richiede nuove tabelle, query SQL o chiavi API.
 
-## Funzionalità
+## Come aggiornare `gst-23/filo` senza perdere il collegamento Supabase
 
-- Tema scuro, logo minimal **Filo.**, giallo fluo. Nessuna icona personalizzata accanto ai titoli; nessuna priorità, dashboard, barra laterale o ricerca.
-- Attività **non completate ordinate rigorosamente per scadenza crescente**: scadute prima, poi oggi, poi futuro; le senza data in fondo. **Le completate** stanno in una sezione richiudibile separata, anch'essa cronologica.
-- Date brevi: *Ieri*, *Oggi*, *Domani*, oppure giorno e mese senza anno. Il giorno/mese/anno completo è visibile passando il mouse sopra la data o dal modulo Modifica.
-- Scadenze passate e odierne evidenziate in giallo fluo.
-- Rinvio rapido con uno **slider 0–7 giorni**, inizialmente nascosto: compare al passaggio del mouse o al focus. Rilasciando lo slider su 1–7 giorni il rinvio viene applicato, con possibilità di **Annulla**. Se la scadenza è passata, il conteggio parte da oggi; altrimenti dalla scadenza esistente. Si contano **giorni di calendario**.
-- **+** grigio in alto per aggiungere attività. Clic su un titolo o sulla freccia per aprire sotto-attività, note e allegati nella stessa lista; vicino alla freccia compare il conteggio delle sotto-attività.
-- Menu **⋯** per Modifica, Duplica (senza copiare gli allegati), Copia link specifico, Aggiungi allegato, Elimina.
-- Sotto-attività con checkbox e note. File allegati da scaricare o rimuovere, fino a **20 MB per file**.
-- Salvataggio dopo ogni operazione. In cloud tutti i dispositivi vedono gli stessi dati e la pagina li ricarica automaticamente ogni ~30 secondi mentre non si sta scrivendo, oltre al comando «Aggiorna».
-- Backup JSON con allegati ed importazione (compatibile anche con backup del prototipo **Piano**).
+1. Per sicurezza, sul sito Filo già funzionante premi **Esporta backup** prima di intervenire: il file JSON include attività e allegati.
+2. Estrai lo ZIP **Filo-aggiornamento-v2-GitHub.zip** sul computer.
+3. Apri il repository **https://github.com/gst-23/filo** e scegli **Add file → Upload files**.
+4. Trascina nella radice del repository questi **quattro file estratti**: `index.html`, `styles.css`, `app.js` e `README.md`. GitHub sostituirà le versioni precedenti. Non caricare lo ZIP intero e non creare sottocartelle.
+5. Clicca su **Commit changes**. La pubblicazione automatica GitHub Pages usa la configurazione già esistente (branch `main`, cartella `/ (root)`).
+6. Una volta completata la pubblicazione in **Actions**, apri **https://gst-23.github.io/filo/**. Se appare ancora la versione precedente, usa **Ctrl+F5** o prova una scheda in incognito.
 
-## 1. Pubblicazione del sito su GitHub Pages
+### Non sovrascrivere questi file
 
-1. Accedi a https://github.com e clicca sul **+** in alto a destra, poi **New repository**.
-2. Chiama il repository ad esempio **filo**, scegli **Public**, poi **Create repository**. (Non inserire credenziali segrete nel repository.)
-3. Estrai il file ZIP allegato. Entra nella cartella `filo` e seleziona **tutti i file al suo interno** (`index.html`, `styles.css`, `app.js`, `config.js`, `favicon.svg`, `database.sql`, `README.md` e, se visibile, `.nojekyll`). **Non caricare soltanto lo ZIP** e non creare una cartella `filo` annidata nel repository: `index.html` deve trovarsi nella radice.
-4. Nel repository appena creato, clicca **Add file → Upload files** (oppure il collegamento *uploading an existing file*), trascina i file, poi **Commit changes**.
-5. Apri **Settings → Pages**; in **Build and deployment** scegli **Deploy from a branch**, imposta **main** e **/(root)**, quindi **Save**.
-6. La pagina sarà pubblicata all'indirizzo: `https://TUO-USERNAME.github.io/filo/` (sostituisci il vero username GitHub). GitHub mostra l'URL effettivo in **Settings → Pages**.
-7. Se la pagina non appare subito, controlla dopo la pubblicazione la sezione **Actions** o **Settings → Pages** per eventuali errori di build.
+- **`config.js`**: contiene il Project URL e la chiave pubblica Supabase che hai già configurato. Il file **non è incluso in questo pacchetto**, proprio per impedire di azzerare il collegamento.
+- **`database.sql`**: le tabelle e le policy Supabase esistenti sono compatibili; non va ricaricato o rieseguito.
+- **`favicon.svg`** e **`.nojekyll`**: non richiedono modifiche, quindi rimangono quelli già presenti.
 
-> **IMPORTANTE:** in questo stato iniziale `config.js` è vuoto: il sito funziona, ma le attività e i file sono salvati SOLO nel browser locale. **Per condividere la stessa lista tra PC, smartphone e altre persone esegui anche il punto 2.**
+Le attività e gli allegati sono conservati in Supabase, **non nel repository GitHub**. Un aggiornamento dei quattro file indicati non cancella i dati esistenti.
 
-## 2. Attivare il salvataggio online SENZA LOGIN (Supabase)
+## Cosa cambia
 
-La configurazione è intenzionalmente **pubblica in lettura e scrittura**: chi apre il link può vedere e modificare la lista senza password. Non usate questo modello per dati aziendali, personali o riservati; anche chi ricava l'URL/chiave pubblica dall'applicazione potrebbe accedere direttamente al database e agli allegati. Non esiste un controllo di accesso per singolo visitatore. Senza un livello server aggiuntivo non è possibile rendere privati i dati e mantenere una bacheca pubblica interamente anonima.
+- **Righe più basse:** circa 62 px su desktop (prima 88 px), più compatte anche su smartphone.
+- **Solo titolo e scadenza:** rimossi dalla grafica il campo «Progetto / categoria», la «Descrizione» e le etichette ridondanti sotto la data (come «Scade oggi»).
+- **Nuova attività in riga:** cliccando sul **+** appare direttamente una riga vuota **in cima alla lista**. Inserisci il titolo e seleziona la data di scadenza; premi la piccola **spunta gialla** o **Invio** per salvare, oppure **×** / **Esc** per annullare. L'attività viene inviata online a Supabase appena salvata e assume immediatamente la posizione cronologica corretta.
+- **Modifica in riga:** anche **⋯ → Modifica** permette di cambiare titolo e scadenza nello stesso punto, senza popup. Titolo e scadenza sono obbligatori per una nuova attività.
+- **Completamento = eliminazione:** cliccando sul cerchietto alla sinistra del titolo, l'attività viene cancellata **definitivamente** dalla lista **e dal database Supabase**, insieme ai relativi allegati. **Non c'è più una sezione «Attività completate».** Non c'è annullamento per questa operazione. È consigliato esportare un backup ogni tanto, soprattutto prima di aggiornare il sito.
+- **Dettagli più puliti:** cliccando sul titolo o sulla freccia a destra compaiono solo **Sotto-attività** e **Allegati**. Il piccolo numero vicino alla freccia indica quante sotto-attività sono presenti. Le note non compaiono più.
+- **Slider discreto:** resta il rinvio da 1 a 7 giorni al passaggio del mouse o al clic. La frase «Trascina da 1 a 7 giorni» è stata eliminata. Il rinvio parte dalla data attuale se la precedente è già scaduta, altrimenti dalla scadenza impostata. È ancora possibile annullare un rinvio tramite la notifica temporanea.
+- **Ordine cronologico:** prima le scadenze passate, poi oggi, poi quelle future. Le attività senza scadenza già esistenti rimangono in fondo.
 
-1. Crea un progetto su https://supabase.com (serve un account **solo a chi configura il backend**, non a chi consulta il sito).
-2. Apri il progetto, poi **SQL Editor**. Incolla l'intero file **`database.sql`** incluso nello ZIP e premi **Run**. Vengono create la tabella condivisa, le policy RLS per accesso anonimo e un bucket pubblico per gli allegati. Leggi prima l'avviso all'inizio del file.
-3. In Supabase cerca **Connect** oppure **Project Settings → API Keys**. Copia il **Project URL** e la chiave **Publishable**, il cui prefisso è `sb_publishable_`. La chiave publishable è pubblica per definizione, NON protegge il database.
-4. Modifica il file **`config.js`** come segue, usando i tuoi valori:
+## Compatibilità con i dati preesistenti
 
-   ```js
-   window.FILO_CONFIG = {
-     supabaseUrl: 'https://IL-TUO-PROGETTO.supabase.co',
-     supabasePublishableKey: 'sb_publishable_...'
-   };
-   ```
+Per non richiedere una migrazione Supabase, i vecchi campi `project`, `description` e `notes` **restano nello schema e negli eventuali record precedenti**, ma sono nascosti nella nuova interfaccia. I dati legacy sono inclusi nel backup JSON fino a quando il relativo record viene eliminato.
 
-5. Carica il `config.js` modificato su GitHub, sostituendo il precedente file, ed effettua un **Commit changes**.
-6. Ricarica la pagina GitHub Pages. In fondo deve comparire **«Online · modifiche salvate automaticamente»**. Prova a creare un'attività dal computer e apri lo stesso link sul telefono (aggiorna la pagina, se necessario): vedrai lo stesso elenco.
+Le attività eventualmente **già completate nella vecchia versione** non vengono mostrate, ma non vengono cancellate automaticamente dal database. Solo il completamento effettuato da questa versione in poi elimina subito il record.
 
-**Non inserire mai `sb_secret_...`, `service_role`, password di database o token di amministratore nei file pubblici.** Il database del progetto è comunque accessibile senza credenziali, per scelta: imposta quote adeguate e non caricare file sensibili. Il piano Supabase può avere limiti e costi.
+## Salvataggio e sicurezza
 
-## 3. Prova locale prima di caricare su GitHub
+Il salvataggio delle operazioni continua a usare la tabella `filo_tasks` e lo storage `filo-files` della configurazione Supabase esistente. I cambiamenti vengono inviati online appena confermati; gli altri dispositivi ricaricano periodicamente i dati o manualmente con **Aggiorna**. Se il database non è raggiungibile, compare un errore invece di dare per riuscita la modifica.
 
-Senza Supabase, basta servire la cartella `filo` con un piccolo web server:
-
-```bash
-cd filo
-python3 -m http.server 8000
-```
-
-Apri `http://localhost:8000` nel browser. In questa modalità le attività sono conservate in `localStorage` e gli allegati in `IndexedDB`; non vengono sincronizzati tra dispositivi. Il salvataggio locale mantiene le chiavi del vecchio prototipo Piano, per non perdere eventuali dati già inseriti sullo stesso origin del browser.
-
-Per passare dalla modalità locale al cloud: **esporta un backup** tramite il link a piè di pagina, configura Supabase come sopra, quindi **importa il backup** nella nuova bacheca online. I backup incorporano gli allegati come dati Base64 e possono essere grandi e non cifrati: conservali attentamente.
-
-## 4. Aggiornare Filo in futuro
-
-Puoi sostituire `index.html`, `styles.css`, `app.js` e `favicon.svg` caricando le versioni nuove nel repository GitHub. Le attività cloud rimangono su Supabase, non dentro i file di GitHub; se fai modifiche allo schema SQL, valuta prima un backup.
-
-## Note e limiti
-
-- Chiunque abbia l'accesso pubblico API può **leggere, aggiungere, modificare, cancellare** attività e file. Il solo fatto di tenere segreto il link non costituisce protezione. Non installare in un ambiente con documentazione aziendale o privata senza aggiungere un'autenticazione o un backend controllato.
-- Il sistema non gestisce al momento permessi, versioni, annullamento delle cancellazioni o avvisi via email. Gli allegati eliminati potrebbero non essere recuperabili.
-- Se due persone modificano simultaneamente **la stessa attività**, prevale l'ultimo salvataggio; le modifiche a note/sotto-attività della stessa attività possono quindi sovrascriversi. Esporta backup periodici.
-- La sincronizzazione su altri dispositivi non è istantanea: aggiornamento automatico ogni circa **30 secondi** (o clic su **Aggiorna**). Il salvataggio di ogni modifica avviene online subito, quando la connessione è disponibile.
-- Se `config.js` contiene parametri Supabase errati o la connessione cade, Filo segnala un errore e **non** fa finta che le modifiche siano state sincronizzate.
-- La dimensione massima configurata degli allegati è 20 MB per file, indipendentemente dai limiti di piano applicati dal fornitore.
-
-## Struttura file
-
-| File | Utilizzo |
-|---|---|
-| `index.html` | Struttura interfaccia |
-| `styles.css` | Grafica dark responsive |
-| `app.js` | Funzionalità, salvataggi, backup, slider |
-| `favicon.svg` | Logo minimal «F.» |
-| `config.js` | Attivazione opzionale backend cloud (chiave **pubblica** soltanto) |
-| `database.sql` | Tabelle e policy pubbliche Supabase |
-| `.nojekyll` | Compatibilità GitHub Pages |
-| `README.md` | Questo manuale |
+**Attenzione:** il sito è volutamente senza login. Il database e gli allegati sono leggibili e modificabili da chi dispone della chiave pubblica esposta nel browser, anche senza conoscere il link della pagina. Non inserire materiali confidenziali, dati personali o aziendali riservati senza protezioni server/autenticazione appropriate.
